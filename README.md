@@ -1,7 +1,7 @@
 # Dota 2 Pro Tracker Hero Grids Auto-Parser
 
 ## Structure
-`hero_grids/{role}/{category}/hero_grid_config.json`
+`hero_grids/{category}/hero_grid_config.json`
 
 ## Setup
 1. Fork repository.

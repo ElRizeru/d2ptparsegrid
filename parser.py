@@ -3,15 +3,6 @@ import os
 from playwright.async_api import async_playwright
 from playwright_stealth import stealth_async
 
-ROLE_MAPPING = {
-    "0": "all_roles",
-    "1": "carry",
-    "2": "mid",
-    "3": "offlane",
-    "4": "support",
-    "5": "hard_support"
-}
-
 CATEGORIES = [
     ("Most Played", "most_played"),
     ("High Winrate", "high_winrate"),
@@ -21,19 +12,17 @@ CATEGORIES = [
 BASE_URL = "https://dota2protracker.com/meta-hero-grids"
 OUTPUT_DIR = "hero_grids"
 
-async def download_grid(page, role_id, role_name):
-    print(f"[PROCESS] {role_name}")
+async def download_grid(page):
     try:
-        selector = "select#config-select"
+        selector = "button:has-text('Download')"
         await page.wait_for_selector(selector, state="visible", timeout=180000)
-        await page.select_option(selector, role_id)
-        await asyncio.sleep(15)
+        await asyncio.sleep(5)
         
         buttons = page.locator("button", has_text="Download")
         count = await buttons.count()
         
         if count < 3:
-            print(f"  [ERROR] Found only {count} buttons for {role_name}")
+            print(f"[ERROR] Found only {count} buttons")
             return
 
         for i, (display_name, folder_name) in enumerate(CATEGORIES):
@@ -44,15 +33,14 @@ async def download_grid(page, role_id, role_name):
                     await download_button.click()
                 
                 download = await download_info.value
-                target_path = os.path.join(OUTPUT_DIR, role_name, folder_name, "hero_grid_config.json")
+                target_path = os.path.join(OUTPUT_DIR, folder_name, "hero_grid_config.json")
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
                 await download.save_as(target_path)
-                print(f"  [SUCCESS] {target_path}")
+                print(f"[SUCCESS] {target_path}")
             except Exception as e:
-                print(f"  [ERROR] {role_name} {display_name}: {e}")
+                print(f"[ERROR] {display_name}: {e}")
     except Exception as e:
-        print(f"  [FATAL] {role_name}: {e}")
-        print(f"  [DEBUG] Page Title: {await page.title()}")
+        print(f"[FATAL]: {e}")
 
 async def main():
     async with async_playwright() as p:
@@ -71,9 +59,7 @@ async def main():
             print(f"[START] {BASE_URL}")
             await page.goto(BASE_URL, wait_until="load", timeout=180000)
             await asyncio.sleep(20)
-            
-            for role_id, role_name in ROLE_MAPPING.items():
-                await download_grid(page, role_id, role_name)
+            await download_grid(page)
         except Exception as e:
             print(f"[ERROR] {e}")
         finally:
