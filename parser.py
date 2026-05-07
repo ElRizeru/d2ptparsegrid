@@ -12,11 +12,11 @@ ROLE_MAPPING = {
     "5": "hard_support"
 }
 
-CATEGORY_MAPPING = {
-    "Most Played": "most_played",
-    "High Winrate": "high_winrate",
-    "D2PT Rating": "d2pt_rating"
-}
+CATEGORIES = [
+    ("Most Played", "most_played"),
+    ("High Winrate", "high_winrate"),
+    ("D2PT Rating", "d2pt_rating")
+]
 
 BASE_URL = "https://dota2protracker.com/meta-hero-grids"
 OUTPUT_DIR = "hero_grids"
@@ -27,12 +27,18 @@ async def download_grid(page, role_id, role_name):
         selector = "select#config-select"
         await page.wait_for_selector(selector, state="visible", timeout=180000)
         await page.select_option(selector, role_id)
-        await asyncio.sleep(10)
+        await asyncio.sleep(15)
         
-        for display_name, folder_name in CATEGORY_MAPPING.items():
+        buttons = page.locator("button", has_text="Download")
+        count = await buttons.count()
+        
+        if count < 3:
+            print(f"  [ERROR] Found only {count} buttons for {role_name}")
+            return
+
+        for i, (display_name, folder_name) in enumerate(CATEGORIES):
             try:
-                section = page.locator("div", has_text=display_name).filter(has=page.locator("button", has_text="Download")).first
-                download_button = section.locator("button", has_text="Download")
+                download_button = buttons.nth(i)
                 
                 async with page.expect_download(timeout=180000) as download_info:
                     await download_button.click()
@@ -64,7 +70,7 @@ async def main():
         try:
             print(f"[START] {BASE_URL}")
             await page.goto(BASE_URL, wait_until="load", timeout=180000)
-            await asyncio.sleep(15)
+            await asyncio.sleep(20)
             
             for role_id, role_name in ROLE_MAPPING.items():
                 await download_grid(page, role_id, role_name)
