@@ -15,8 +15,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-ITEMBUILDS_ZIP_URL = "https://github.com/Egezenn/OpenDotaGuides/releases/latest/download/itembuilds.zip"
-DEFAULT_REPO = "ElRizeru/d2ptparsegrid"
+import hashlib
+import time
+import subprocess
+
+ITEMBUILDS_ZIP_URL = "https://raw.githubusercontent.com/ElRizeru/d2ptparsegrid/main/itembuilds.zip"
 HERO_GRID_RAW_URL_TEMPLATE = "https://raw.githubusercontent.com/{repo}/main/hero_grids/{category}/hero_grid_config.json"
 CONFIG_FILE = "config.json"
 
@@ -74,35 +77,135 @@ def get_dota_paths(steam_base: str) -> List[str]:
             logger.error(f"Failed to parse libraryfolders.vdf: {e}")
     return dota_paths
 
-def get_itembuilds_dir() -> Optional[str]:
-    steam_base = get_steam_path()
-    dota_paths = get_dota_paths(steam_base)
-    for dota_path in dota_paths:
-        ib_path = os.path.join(dota_path, "game", "dota", "itembuilds")
-        if os.path.exists(ib_path):
-            return ib_path
-        ib_path_alt = ib_path.replace("dota 2 beta", "dota 2")
-        if os.path.exists(ib_path_alt):
-            return ib_path_alt
-    return None
+def clean_old_guides(guide_path: str, remotecache_path: str, new_build_files: set):
+    if not os.path.exists(guide_path):
+        return
+        
+    old_files = []
+    for f in os.listdir(guide_path):
+        if not f.endswith(".build"):
+            continue
+        if f in new_build_files:
+            continue
+            
+        filepath = os.path.join(guide_path, f)
+        try:
+            with open(filepath, "r", encoding="utf-8") as file:
+                content = file.read()
+                if '"Title"\t\t"ODG ' in content or '"Title"\t"ODG ' in content:
+                    old_files.append(f)
+        except Exception:
+            pass
+            
+    if not old_files:
+        return
+        
+    logger.info(f"Cleaning {len(old_files)} old guides from {guide_path}")
+    for f in old_files:
+        try:
+            os.remove(os.path.join(guide_path, f))
+        except Exception as e:
+            logger.warning(f"Failed to remove {f}: {e}")
+            
+    if os.path.exists(remotecache_path):
+        try:
+            with open(remotecache_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                
+            for old_file in old_files:
+                vdf_key = f'guides/{old_file}'
+                pattern = r'\t*"' + re.escape(vdf_key) + r'"\s*\{[^}]+\}\n'
+                content = re.sub(pattern, '', content)
+                
+            with open(remotecache_path, "w", encoding="utf-8") as f:
+                f.write(content)
+        except Exception as e:
+            logger.error(f"Failed to clean remotecache.vdf: {e}")
 
 def update_itembuilds():
-    target_dir = get_itembuilds_dir()
-    if not target_dir:
-        logger.warning("Itembuilds directory not found. Skipping.")
+    steam_base = get_steam_path()
+    userdata_path = os.path.join(steam_base, "userdata")
+    if not os.path.exists(userdata_path):
+        logger.error(f"Steam userdata not found at {userdata_path}")
         return
+
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_zip = os.path.join(tmpdir, "guides_temp.zip")
             extract_path = os.path.join(tmpdir, "extract_temp")
-            logger.info(f"Downloading itembuilds to {target_dir}...")
+            logger.info(f"Downloading itembuilds...")
             urllib.request.urlretrieve(ITEMBUILDS_ZIP_URL, temp_zip)
             shutil.unpack_archive(temp_zip, extract_path, "zip")
-            for file in os.listdir(extract_path):
-                src = os.path.join(extract_path, file)
-                dst = os.path.join(target_dir, file)
-                if os.path.isfile(src):
+            
+            new_build_files = set(os.listdir(extract_path))
+            
+            steam_running = False
+            if platform.system() == "Linux":
+                try:
+                    if "steam" in subprocess.check_output(["ps", "-A"], text=True).lower():
+                        steam_running = True
+                        logger.info("Shutting down Steam to update guides...")
+                        subprocess.run(["steam", "-shutdown"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        time.sleep(5)
+                except: pass
+            elif platform.system() == "Windows":
+                try:
+                    if "steam.exe" in subprocess.check_output(["tasklist"], text=True).lower():
+                        steam_running = True
+                        logger.info("Shutting down Steam to update guides...")
+                        steam_path = os.path.join(steam_base, "steam.exe")
+                        subprocess.run([steam_path, "-shutdown"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        time.sleep(5)
+                except: pass
+
+            for steam_id in os.listdir(userdata_path):
+                if not steam_id.isdigit():
+                    continue
+                guide_dir = os.path.join(userdata_path, steam_id, "570", "remote", "guides")
+                remotecache_path = os.path.join(userdata_path, steam_id, "570", "remotecache.vdf")
+                
+                os.makedirs(guide_dir, exist_ok=True)
+                clean_old_guides(guide_dir, remotecache_path, new_build_files)
+                
+                for file in new_build_files:
+                    src = os.path.join(extract_path, file)
+                    dst = os.path.join(guide_dir, file)
                     shutil.copy2(src, dst)
+                    
+                    if os.path.exists(remotecache_path):
+                        with open(dst, "rb") as f:
+                            data = f.read()
+                            size = len(data)
+                            sha = hashlib.sha1(data).hexdigest()
+                        
+                        try:
+                            with open(remotecache_path, "r", encoding="utf-8") as f:
+                                lines = f.readlines()
+                            
+                            vdf_key = f'guides/{file}'
+                            found = any(vdf_key in line for line in lines)
+                            
+                            if not found:
+                                for j in range(len(lines)-1, -1, -1):
+                                    if lines[j].strip() == '}':
+                                        t = int(time.time())
+                                        new_entry = f'\t"{vdf_key}"\n\t{{\n\t\t"root"\t\t"0"\n\t\t"size"\t\t"{size}"\n\t\t"localtime"\t\t"{t}"\n\t\t"time"\t\t"{t}"\n\t\t"remotetime"\t\t"{t}"\n\t\t"sha"\t\t"{sha}"\n\t\t"syncstate"\t\t"1"\n\t\t"persiststate"\t\t"0"\n\t\t"platformstosync2"\t\t"-1"\n\t}}\n'
+                                        lines.insert(j, new_entry)
+                                        break
+                                
+                                with open(remotecache_path, "w", encoding="utf-8") as f:
+                                    f.writelines(lines)
+                        except Exception as e:
+                            logger.error(f"Failed to update remotecache.vdf: {e}")
+
+            if steam_running:
+                logger.info("Restarting Steam...")
+                if platform.system() == "Linux":
+                    subprocess.Popen(["steam"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                elif platform.system() == "Windows":
+                    steam_path = os.path.join(steam_base, "steam.exe")
+                    subprocess.Popen([steam_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
         logger.info("Itembuilds updated successfully.")
     except Exception as e:
         logger.error(f"Itembuilds update failed: {e}")

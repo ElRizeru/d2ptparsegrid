@@ -5,6 +5,13 @@ import logging
 from typing import List, Tuple
 from playwright.async_api import async_playwright, Page, Browser
 from playwright_stealth import stealth_async
+import csv
+import shutil
+import time
+import requests
+from odg import compiler
+from odg import opendota_api
+from odg import utils
 
 logging.basicConfig(
     level=logging.INFO,
@@ -12,6 +19,84 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
+retryable_status_codes = (429, 504)
+
+def call_opendota_with_wait(description: str, callback):
+    while True:
+        try:
+            return callback()
+        except requests.exceptions.HTTPError as error:
+            status_code = error.response.status_code if error.response is not None else None
+            if status_code in retryable_status_codes:
+                logger.info(f"Waiting for OpenDota while {description}; got status {status_code}..")
+                time.sleep(15)
+                continue
+            logger.exception(f"OpenDota returned a non-retryable status while {description}.")
+            raise
+        except requests.exceptions.Timeout:
+            logger.info(f"Waiting for OpenDota while {description}; request timed out..")
+            time.sleep(15)
+        except requests.exceptions.RequestException:
+            logger.exception(f"Waiting for OpenDota while {description}; request failed..")
+            time.sleep(15)
+
+def build_odg_guides():
+    logger.info("Starting OpenDotaGuides build process...")
+    
+    logger.info("Refreshing the data..")
+    if os.path.exists(utils.data_directory):
+        shutil.rmtree(utils.data_directory)
+    if os.path.exists(utils.itembuilds_directory):
+        shutil.rmtree(utils.itembuilds_directory)
+        
+    os.makedirs(utils.data_directory, exist_ok=True)
+    os.makedirs(utils.itembuilds_directory, exist_ok=True)
+
+    heroes_map = call_opendota_with_wait("fetching heroes", opendota_api.get_heroes_map)
+    items_map = call_opendota_with_wait("fetching items", opendota_api.get_items_map)
+    
+    # Items by name mapping for compiler
+    items_by_name = {}
+    for item_id, item_data in items_map.items():
+        items_by_name[f"item_{item_data['name']}"] = item_data
+
+    neutral_item_tiers = call_opendota_with_wait(
+        "fetching neutral item constants", opendota_api.get_neutral_item_tiers
+    )
+    ability_ids_map = call_opendota_with_wait(
+        "fetching ability id constants", lambda: opendota_api._get_json("/constants/ability_ids")
+    )
+    hero_abilities_map = call_opendota_with_wait(
+        "fetching hero abilities constants", lambda: opendota_api._get_json("/constants/hero_abilities")
+    )
+    
+    for i, (hero_id, hero_data) in enumerate(heroes_map.items(), start=1):
+        logger.info(f"Doing API call {i}/{len(heroes_map)} {hero_data['localized_name']}")
+        call_opendota_with_wait(
+            f"fetching shop item popularity for {hero_data['localized_name']}",
+            lambda hid=hero_id: opendota_api.get_hero_popularity_guide(hid, items_map),
+        )
+        call_opendota_with_wait(
+            f"fetching neutral item popularity for {hero_data['localized_name']}",
+            lambda hid=hero_id: opendota_api.append_hero_neutral_item_guide(hid, neutral_item_tiers),
+        )
+        call_opendota_with_wait(
+            f"fetching ability upgrades for {hero_data['localized_name']}",
+            lambda hid=hero_id: opendota_api.append_hero_ability_guide(hid, ability_ids_map, hero_abilities_map, heroes_map),
+        )
+
+    for i, (hero_id, hero_data) in enumerate(heroes_map.items(), start=1):
+        if not os.path.exists(os.path.join(utils.data_directory, f"{hero_id}.json")):
+            continue
+        logger.info(
+            f"Compiling file {i}/{len(heroes_map)} {hero_data['localized_name']}"
+        )
+        compiler.compile_scrape_to_guide_vdf(hero_id, items_by_name, heroes_map, keep_starting_items=False)
+
+    logger.info("Zipping itembuilds...")
+    shutil.make_archive("itembuilds", "zip", utils.itembuilds_directory)
+    logger.info("Created itembuilds.zip successfully!")
 
 CATEGORIES: List[Tuple[str, str]] = [
     ("Most Played", "most_played"),
@@ -105,6 +190,7 @@ async def main():
 if __name__ == "__main__":
     try:
         asyncio.run(main())
+        build_odg_guides()
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
     except Exception as e:
