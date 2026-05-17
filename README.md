@@ -1,36 +1,60 @@
-# Dota 2 Pro Tracker Hero Grids Auto-Parser
+# Dota 2 Pro Tracker Hero Grids
 
-Automated parser for hero grids from [Dota 2 Pro Tracker](https://dota2protracker.com/meta-hero-grids) and an installation script for end-users.
+[![Update Hero Grids](https://github.com/ElRizeru/d2ptparsegrid/actions/workflows/update_grids.yml/badge.svg)](https://github.com/ElRizeru/d2ptparsegrid/actions/workflows/update_grids.yml)
+[![Build and Release](https://github.com/ElRizeru/d2ptparsegrid/actions/workflows/build_exe.yml/badge.svg)](https://github.com/ElRizeru/d2ptparsegrid/actions/workflows/build_exe.yml)
 
-## Structure
-- `parser.py`: Scraper script for GitHub Actions.
-- `main.py`: User-side script to install grids and item builds.
-- `hero_grids/`: Directory containing parsed grids (updated daily).
-  - `most_played/`
-  - `high_winrate/`
-  - `d2pt_rating/`
+Automated hero grid parser for [Dota 2 Pro Tracker](https://dota2protracker.com/meta-hero-grids). This project provides daily updated hero grids and a user-friendly installer to keep your Dota 2 client synchronized with the pro meta.
 
-## Usage (For Players)
+---
 
-1. Download the repository or just the `main.py` file.
-2. Ensure Python is installed.
-3. Run the updater:
-   ```bash
-   python main.py
+## 🚀 Installation Options
+
+### 1. Windows Executable (Recommended)
+The easiest way for most users. No setup required.
+1. Go to the [Releases](https://github.com/ElRizeru/d2ptparsegrid/releases/latest) page.
+2. Download `D2PT-Grid-Updater.exe`.
+3. Run it and follow the on-screen instructions.
+
+### 2. PowerShell One-Liner (Zero Install)
+Run the updater directly from the internet without downloading any files:
+1. Open **PowerShell**.
+2. Copy and paste the following command:
+   ```powershell
+   powershell -ExecutionPolicy ByPass -Command "irm https://raw.githubusercontent.com/ElRizeru/d2ptparsegrid/main/install.ps1 | iex"
    ```
-4. Select the desired hero grid category from the menu.
-5. The script automatically locates Dota 2, creates a backup of your existing grid, installs the new one, and updates item builds from OpenDotaGuides.
 
-## Setup (For Developers)
+### 3. Manual Python Execution
+If you have Python installed and prefer running from source:
+1. Download `main.py`.
+2. Run: `python main.py`
 
-1. Fork this repository.
-2. Go to **Settings** -> **Actions** -> **General** -> **Workflow permissions** and enable **Read and write permissions**.
-3. Manually trigger the workflow: **Actions** -> **Update Hero Grids** -> **Run workflow**.
-4. (Optional) Update `DEFAULT_REPO` in `main.py` to point to your fork.
+---
 
-## Local Parsing
-```bash
-pip install -r requirements.txt
-playwright install chromium
-python parser.py
-```
+## ✨ Features
+- **Pro Meta Grids:** Automatically pulls data from D2PT for "Most Played", "High Winrate", and "D2PT Rating".
+- **Item Builds:** Optional integration with high-quality item guides.
+- **Auto-Discovery:** Automatically locates your Steam and Dota 2 installation folders.
+- **Smart Backups:** Creates `.bak` files of your existing configurations before making changes.
+- **Persistent Settings:** Remembers your choices (category, item guides) for one-click future updates.
+- **Cross-Profile Support:** Updates grids for all Steam accounts found on your PC.
+
+---
+
+## 🛠️ Developer Setup
+
+1. **Fork** this repository.
+2. Enable **Read and Write permissions** in `Settings` -> `Actions` -> `General`.
+3. The `Update Hero Grids` workflow runs daily at 00:00 UTC.
+4. To build your own EXE, manually trigger the `Build and Release` workflow.
+
+---
+
+## 🙏 Acknowledgments
+- **[Dota 2 Pro Tracker](https://dota2protracker.com/)** for providing the incredible meta data.
+- **[OpenDotaGuides](https://github.com/Egezenn/OpenDotaGuides)** - Special thanks to @Egezenn for the automated item builds integration.
+- **[Playwright](https://playwright.dev/)** for the scraping engine.
+
+---
+
+## 📄 License
+This project is open-source and available under the MIT License.
