@@ -13,7 +13,7 @@ Automated hero grid parser for [Dota 2 Pro Tracker](https://dota2protracker.com/
 Layouts organized by roles and current meta.
 
 <p align="center">
-  <img src="1.png" width="100%" alt="Main Hero Grid">
+  <img src="assets/1.png" width="100%" alt="Main Hero Grid">
 </p>
 
 ---
@@ -22,7 +22,7 @@ Layouts organized by roles and current meta.
 Matchups and teammates based on D2PT data.
 
 <p align="center">
-  <img src="2.png" width="100%" alt="Counters and Synergies">
+  <img src="assets/2.png" width="100%" alt="Counters and Synergies">
 </p>
 
 ---
