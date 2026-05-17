@@ -7,6 +7,35 @@ Automated hero grid parser for [Dota 2 Pro Tracker](https://dota2protracker.com/
 
 ---
 
+## 📸 In-Game Preview
+
+### Hero Grids
+Layouts organized by roles and current meta.
+
+<p align="center">
+  <img src="1.png" width="100%" alt="Main Hero Grid">
+</p>
+
+---
+
+### Counters & Synergies
+Matchups and teammates based on D2PT data.
+
+<p align="center">
+  <img src="2.png" width="100%" alt="Counters and Synergies">
+</p>
+
+---
+
+### Item Builds
+Item guides from OpenDotaGuides.
+
+<p align="center">
+  <img src="assets/3.png" width="300" alt="Item Builds">
+</p>
+
+---
+
 ## 🚀 Installation Options
 
 ### 1. Windows Executable (Recommended)
