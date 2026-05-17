@@ -5,6 +5,7 @@ import platform
 import logging
 import re
 import json
+import tempfile
 from datetime import datetime
 from typing import Optional, List
 
@@ -90,25 +91,21 @@ def update_itembuilds():
     if not target_dir:
         logger.warning("Itembuilds directory not found. Skipping.")
         return
-    temp_zip = "guides_temp.zip"
-    extract_path = "extract_temp"
     try:
-        logger.info(f"Downloading itembuilds to {target_dir}...")
-        urllib.request.urlretrieve(ITEMBUILDS_ZIP_URL, temp_zip)
-        if os.path.exists(extract_path):
-            shutil.rmtree(extract_path)
-        shutil.unpack_archive(temp_zip, extract_path, "zip")
-        for file in os.listdir(extract_path):
-            src = os.path.join(extract_path, file)
-            dst = os.path.join(target_dir, file)
-            if os.path.isfile(src):
-                shutil.copy2(src, dst)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_zip = os.path.join(tmpdir, "guides_temp.zip")
+            extract_path = os.path.join(tmpdir, "extract_temp")
+            logger.info(f"Downloading itembuilds to {target_dir}...")
+            urllib.request.urlretrieve(ITEMBUILDS_ZIP_URL, temp_zip)
+            shutil.unpack_archive(temp_zip, extract_path, "zip")
+            for file in os.listdir(extract_path):
+                src = os.path.join(extract_path, file)
+                dst = os.path.join(target_dir, file)
+                if os.path.isfile(src):
+                    shutil.copy2(src, dst)
         logger.info("Itembuilds updated successfully.")
     except Exception as e:
         logger.error(f"Itembuilds update failed: {e}")
-    finally:
-        if os.path.exists(temp_zip): os.remove(temp_zip)
-        if os.path.exists(extract_path): shutil.rmtree(extract_path)
 
 def backup_file(file_path: str):
     if os.path.exists(file_path):
@@ -122,7 +119,8 @@ def update_hero_grids(category_key: str):
         logger.error(f"Steam userdata not found at {userdata_path}")
         return
     category_folder, category_name = CATEGORIES.get(category_key, CATEGORIES["2"])
-    local_grid = os.path.join("hero_grids", category_folder, "hero_grid_config.json")
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    local_grid = os.path.join(base_dir, "hero_grids", category_folder, "hero_grid_config.json")
     remote_url = HERO_GRID_RAW_URL_TEMPLATE.format(repo=DEFAULT_REPO, category=category_folder)
     logger.info(f"Updating grids with category: {category_name}")
     updated_count = 0
@@ -155,7 +153,7 @@ def load_config():
         try:
             with open(CONFIG_FILE, "r") as f:
                 return json.load(f)
-        except:
+        except (FileNotFoundError, json.JSONDecodeError):
             return {}
     return {}
 

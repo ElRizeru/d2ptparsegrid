@@ -57,17 +57,19 @@ function Update-Itembuilds($dotaPaths) {
     }
 
     Write-Host "Downloading itembuilds..." -ForegroundColor Cyan
-    $tempZip = "guides_temp.zip"
-    Invoke-WebRequest -Uri $ITEMBUILDS_URL -OutFile $tempZip
+    $tempZip = Join-Path $env:TEMP "guides_temp.zip"
+    $extractPath = Join-Path $env:TEMP "extract_temp"
     
-    $extractPath = "extract_temp"
-    if (Test-Path $extractPath) { Remove-Item -Recurse -Force $extractPath }
-    Expand-Archive -Path $tempZip -DestinationPath $extractPath
-    
-    Copy-Item -Path "$extractPath\*" -Destination $targetDir -Force
-    Remove-Item $tempZip
-    Remove-Item -Recurse $extractPath
-    Write-Host "Itembuilds updated successfully." -ForegroundColor Green
+    try {
+        Invoke-WebRequest -Uri $ITEMBUILDS_URL -OutFile $tempZip
+        if (Test-Path $extractPath) { Remove-Item -Recurse -Force $extractPath }
+        Expand-Archive -Path $tempZip -DestinationPath $extractPath
+        Copy-Item -Path "$extractPath\*" -Destination $targetDir -Force
+        Write-Host "Itembuilds updated successfully." -ForegroundColor Green
+    } finally {
+        if (Test-Path $tempZip) { Remove-Item -Force $tempZip }
+        if (Test-Path $extractPath) { Remove-Item -Recurse -Force $extractPath }
+    }
 }
 
 function Update-HeroGrids($categoryKey, $steamBase) {
@@ -93,9 +95,13 @@ function Update-HeroGrids($categoryKey, $steamBase) {
             if (Test-Path $gridDir) {
                 $target = Join-Path $gridDir "hero_grid_config.json"
                 if (Test-Path $target) { Copy-Item $target "$target.bak" -Force }
-                Invoke-WebRequest -Uri $url -OutFile $target
-                Write-Host "Updated grid for $($id.Name)" -ForegroundColor Green
-                $count++
+                try {
+                    Invoke-WebRequest -Uri $url -OutFile $target -ErrorAction Stop
+                    Write-Host "Updated grid for $($id.Name)" -ForegroundColor Green
+                    $count++
+                } catch {
+                    Write-Host "Failed to download file: $_" -ForegroundColor Red
+                }
             }
         }
     }
