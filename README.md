@@ -41,7 +41,7 @@ This tool automatically synchronizes your Dota 2 client with the latest professi
 <details open>
 <summary><b>Hero Grids (Roles & Current Meta)</b></summary>
 <br>
-<p align="center"><img src="1.png" width="100%" alt="Main Hero Grid"></p>
+<p align="center"><img src="assets/1.png" width="100%" alt="Main Hero Grid"></p>
 </details>
 
 <details open>
