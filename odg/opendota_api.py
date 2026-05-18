@@ -133,18 +133,8 @@ def _extract_neutral_item_tiers(constants_data) -> dict:
 
 def get_neutral_item_tiers():
     """Gets a mapping of neutral item names/ids to their neutral tier."""
-    constants_data = _get_json("/constants/neutral_items", allow_not_found=1)
-
-    if constants_data is None:
-        logger.info("Falling back to /constants/items for neutral item tiers.")
-        constants_data = _get_json("/constants/items")
-
+    constants_data = _get_json("/constants/items")
     neutral_item_tiers = _extract_neutral_item_tiers(constants_data)
-
-    if not neutral_item_tiers:
-        logger.info("No neutral tiers found in /constants/neutral_items; trying /constants/items.")
-        constants_data = _get_json("/constants/items")
-        neutral_item_tiers = _extract_neutral_item_tiers(constants_data)
 
     if not neutral_item_tiers:
         raise ValueError("Could not find neutral item tier data in OpenDota constants.")
@@ -273,7 +263,11 @@ def get_hero_ability_guide(hero_id: str, ability_ids_map: dict | None = None, he
     if hero_name and hero_name in hero_abilities_map:
         ha = hero_abilities_map[hero_name]
         if "abilities" in ha:
-            valid_abilities.update(ha["abilities"])
+            for ability in ha["abilities"]:
+                if isinstance(ability, list):
+                    valid_abilities.update(ability)
+                else:
+                    valid_abilities.add(ability)
         if "talents" in ha:
             for t in ha["talents"]:
                 valid_abilities.add(t["name"])
