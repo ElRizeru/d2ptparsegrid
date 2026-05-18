@@ -6,8 +6,8 @@ $ASCII_ART = @"
 |____/|_____|_|    |_|    \____|_| \_\___|____/ 
 "@
 
-$ITEMBUILDS_URL = "https://raw.githubusercontent.com/ElRizeru/d2ptparsegrid/main/itembuilds.zip"
-$REPO = "ElRizeru/d2ptparsegrid"
+$ITEMBUILDS_URL = "https://raw.githubusercontent.com/ElRizeru/d2ptgrid/main/itembuilds.zip"
+$REPO = "ElRizeru/d2ptgrid"
 $GRID_URL_TEMPLATE = "https://raw.githubusercontent.com/$REPO/main/hero_grids/{0}/hero_grid_config.json"
 $CONFIG_FILE = "config.json"
 

@@ -20,6 +20,7 @@ import time
 import subprocess
 
 ITEMBUILDS_ZIP_URL = "https://raw.githubusercontent.com/ElRizeru/d2ptparsegrid/main/itembuilds.zip"
+DEFAULT_REPO = "ElRizeru/d2ptparsegrid"
 HERO_GRID_RAW_URL_TEMPLATE = "https://raw.githubusercontent.com/{repo}/main/hero_grids/{category}/hero_grid_config.json"
 CONFIG_FILE = "config.json"
 
@@ -57,25 +58,6 @@ def get_steam_path() -> str:
                 return p
         return paths[0]
 
-def get_dota_paths(steam_base: str) -> List[str]:
-    dota_paths = []
-    standard = os.path.join(steam_base, "steamapps", "common", "dota 2 beta")
-    if os.path.exists(standard):
-        dota_paths.append(standard)
-    vdf_path = os.path.join(steam_base, "steamapps", "libraryfolders.vdf")
-    if os.path.exists(vdf_path):
-        try:
-            with open(vdf_path, "r", encoding="utf-8") as f:
-                content = f.read()
-                paths = re.findall(r'"path"\s+"([^"]+)"', content)
-                for p in paths:
-                    p = p.replace("\\\\", "\\")
-                    dota_path = os.path.join(p, "steamapps", "common", "dota 2 beta")
-                    if os.path.exists(dota_path) and dota_path not in dota_paths:
-                        dota_paths.append(dota_path)
-        except Exception as e:
-            logger.error(f"Failed to parse libraryfolders.vdf: {e}")
-    return dota_paths
 
 def clean_old_guides(guide_path: str, remotecache_path: str, new_build_files: set):
     if not os.path.exists(guide_path):
