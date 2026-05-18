@@ -6,7 +6,7 @@ $ASCII_ART = @"
 |____/|_____|_|    |_|    \____|_| \_\___|____/ 
 "@
 
-$ITEMBUILDS_URL = "https://github.com/Egezenn/OpenDotaGuides/releases/latest/download/itembuilds.zip"
+$ITEMBUILDS_URL = "https://raw.githubusercontent.com/ElRizeru/d2ptparsegrid/main/itembuilds.zip"
 $REPO = "ElRizeru/d2ptparsegrid"
 $GRID_URL_TEMPLATE = "https://raw.githubusercontent.com/$REPO/main/hero_grids/{0}/hero_grid_config.json"
 $CONFIG_FILE = "config.json"
@@ -26,33 +26,41 @@ function Get-SteamPath {
     }
 }
 
-function Get-DotaPaths($steamBase) {
-    $paths = New-Object System.Collections.Generic.List[string]
-    $standard = Join-Path $steamBase "steamapps\common\dota 2 beta"
-    if (Test-Path $standard) { $paths.Add($standard) }
-
-    $vdf = Join-Path $steamBase "steamapps\libraryfolders.vdf"
-    if (Test-Path $vdf) {
-        $content = Get-Content $vdf -Raw
-        $matches = [regex]::Matches($content, '"path"\s+"([^"]+)"')
-        foreach ($m in $matches) {
-            $p = $m.Groups[1].Value -replace "\\\\", "\"
-            $dp = Join-Path $p "steamapps\common\dota 2 beta"
-            if (Test-Path $dp) { if (-not $paths.Contains($dp)) { $paths.Add($dp) } }
+function Clean-OldGuides($guidePath, $remotecachePath, $newBuildFiles) {
+    if (-not (Test-Path $guidePath)) { return }
+    $oldFiles = @()
+    foreach ($file in Get-ChildItem -Path $guidePath -Filter "*.build") {
+        if ($newBuildFiles -notcontains $file.Name) {
+            $content = Get-Content $file.FullName -Raw
+            if ($content -match '"Title"\s+"ODG ' -or $content -match '"Title"\t"ODG ') {
+                $oldFiles += $file.Name
+            }
         }
     }
-    return $paths
+    
+    if ($oldFiles.Count -eq 0) { return }
+    
+    Write-Host "Cleaning $($oldFiles.Count) old guides from $guidePath" -ForegroundColor Cyan
+    foreach ($f in $oldFiles) {
+        Remove-Item (Join-Path $guidePath $f) -Force -ErrorAction SilentlyContinue
+    }
+    
+    if (Test-Path $remotecachePath) {
+        $content = Get-Content $remotecachePath -Raw
+        foreach ($f in $oldFiles) {
+            $vdfKey = "guides/$f"
+            $escapedKey = [regex]::Escape($vdfKey)
+            $pattern = "`t*`"$escapedKey`"\s*\{[^}]+\}\r?\n"
+            $content = $content -replace $pattern, ""
+        }
+        Set-Content -Path $remotecachePath -Value $content -NoNewline
+    }
 }
 
-function Update-Itembuilds($dotaPaths) {
-    $targetDir = $null
-    foreach ($p in $dotaPaths) {
-        $ib = Join-Path $p "game\dota\itembuilds"
-        if (Test-Path $ib) { $targetDir = $ib; break }
-    }
-
-    if (-not $targetDir) {
-        Write-Host "Itembuilds directory not found. Skipping." -ForegroundColor Yellow
+function Update-Itembuilds($steamBase) {
+    $userData = Join-Path $steamBase "userdata"
+    if (-not (Test-Path $userData)) {
+        Write-Host "Steam userdata not found at $userData" -ForegroundColor Red
         return
     }
 
@@ -61,11 +69,91 @@ function Update-Itembuilds($dotaPaths) {
     $extractPath = Join-Path $env:TEMP "extract_temp"
     
     try {
-        Invoke-WebRequest -Uri $ITEMBUILDS_URL -OutFile $tempZip
+        Invoke-WebRequest -Uri $ITEMBUILDS_URL -OutFile $tempZip -UseBasicParsing
         if (Test-Path $extractPath) { Remove-Item -Recurse -Force $extractPath }
         Expand-Archive -Path $tempZip -DestinationPath $extractPath
-        Copy-Item -Path "$extractPath\*" -Destination $targetDir -Force
+        
+        $newBuildFiles = @(Get-ChildItem -Path $extractPath -File | Select-Object -ExpandProperty Name)
+        
+        $steamRunning = $false
+        if (Get-Process -Name "steam" -ErrorAction SilentlyContinue) {
+            $steamRunning = $true
+            Write-Host "Shutting down Steam to update guides..." -ForegroundColor Yellow
+            $steamExe = Join-Path $steamBase "steam.exe"
+            if (Test-Path $steamExe) {
+                Start-Process -FilePath $steamExe -ArgumentList "-shutdown" -Wait
+                Start-Sleep -Seconds 5
+            } else {
+                Stop-Process -Name "steam" -Force
+                Start-Sleep -Seconds 5
+            }
+        }
+
+        foreach ($id in Get-ChildItem $userData -Directory) {
+            if ($id.Name -match "^\d+$") {
+                $guideDir = Join-Path $id.FullName "570\remote\guides"
+                $remotecachePath = Join-Path $id.FullName "570\remotecache.vdf"
+                
+                if (-not (Test-Path $guideDir)) { New-Item -ItemType Directory -Force -Path $guideDir | Out-Null }
+                
+                Clean-OldGuides $guideDir $remotecachePath $newBuildFiles
+                
+                foreach ($file in $newBuildFiles) {
+                    $src = Join-Path $extractPath $file
+                    $dst = Join-Path $guideDir $file
+                    Copy-Item -Path $src -Destination $dst -Force
+                    
+                    if (Test-Path $remotecachePath) {
+                        $hash = (Get-FileHash -Path $dst -Algorithm SHA1).Hash.ToLower()
+                        $size = (Get-Item $dst).Length
+                        $t = [int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+                        
+                        $lines = [System.Collections.Generic.List[string]](Get-Content $remotecachePath)
+                        $vdfKey = "guides/$file"
+                        $found = $false
+                        foreach ($line in $lines) {
+                            if ($line -match [regex]::Escape($vdfKey)) { $found = $true; break }
+                        }
+                        
+                        if (-not $found) {
+                            for ($j = $lines.Count - 1; $j -ge 0; $j--) {
+                                if ($lines[$j].Trim() -eq '}') {
+                                    $entryLines = @(
+                                        "`t`"$vdfKey`"",
+                                        "`t{",
+                                        "`t`t`"root`"`t`t`"0`"",
+                                        "`t`t`"size`"`t`t`"$size`"",
+                                        "`t`t`"localtime`"`t`t`"$t`"",
+                                        "`t`t`"time`"`t`t`"$t`"",
+                                        "`t`t`"remotetime`"`t`t`"$t`"",
+                                        "`t`t`"sha`"`t`t`"$hash`"",
+                                        "`t`t`"syncstate`"`t`t`"1`"",
+                                        "`t`t`"persiststate`"`t`t`"0`"",
+                                        "`t`t`"platformstosync2`"`t`t`"-1`"",
+                                        "`t}"
+                                    )
+                                    $lines.InsertRange($j, $entryLines)
+                                    break
+                                }
+                            }
+                            Set-Content -Path $remotecachePath -Value $lines
+                        }
+                    }
+                }
+            }
+        }
+        
+        if ($steamRunning) {
+            Write-Host "Restarting Steam..." -ForegroundColor Yellow
+            $steamExe = Join-Path $steamBase "steam.exe"
+            if (Test-Path $steamExe) {
+                Start-Process -FilePath $steamExe
+            }
+        }
+
         Write-Host "Itembuilds updated successfully." -ForegroundColor Green
+    } catch {
+        Write-Host "Itembuilds update failed: $_" -ForegroundColor Red
     } finally {
         if (Test-Path $tempZip) { Remove-Item -Force $tempZip }
         if (Test-Path $extractPath) { Remove-Item -Recurse -Force $extractPath }
@@ -152,10 +240,9 @@ if ($config.category -ne $catChoice -or $config.install_guides -ne $guidesChoice
 
 Write-Host "`nStarting update..." -ForegroundColor Cyan
 $steam = Get-SteamPath
-$dota = Get-DotaPaths $steam
 
 Update-HeroGrids $catChoice $steam
-if ($guidesChoice) { Update-Itembuilds $dota }
+if ($guidesChoice) { Update-Itembuilds $steam }
 
 Write-Host "`nUpdate complete. Press Enter to exit."
 [void][System.Console]::ReadLine()

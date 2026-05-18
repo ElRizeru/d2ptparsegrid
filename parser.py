@@ -195,3 +195,5 @@ if __name__ == "__main__":
         logger.info("Interrupted by user")
     except Exception as e:
         logger.critical(f"Unhandled exception: {e}")
+        import sys
+        sys.exit(1)
